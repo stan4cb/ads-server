@@ -16,62 +16,42 @@ import Control.Monad
 import Control.Applicative
 import Database.Persist.TH
 
-data UserID = UserID { uID :: Int}
-
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-Leaderboard
-  dId Int
-  name Text
-  score Int
-  challengeScore Int
-  deriving Show
-CPool
-  dId Int
-	from Int
-	to Int
-	targetScore Int
-  theme Int
-  status Int
+Ad
+  canShow Bool
+  showRatio Int
+  showCount Int
+  clickCount Int
+  requestCount Int
+  imagePath Text
+  clickUrl Text
 |]
 
-instance FromJSON Leaderboard where
+instance FromJSON Ad where
  parseJSON (Object v) =
-    Leaderboard <$> v .: "dId"
-                <*> v .: "name"
-                <*> v .: "score"
-                <*> v .: "challengeScore"
+    Ad <$> v .: "canShow"
+       <*> v .: "showRatio"
+       <*> v .: "showCount"
+       <*> v .: "clickCount"
+       <*> v .: "requestCount"
+       <*> v .: "imagePath"
+       <*> v .: "clickUrl"
  parseJSON _ = mzero
 
-instance ToJSON Leaderboard where
- toJSON (Leaderboard dId name score challengeScore) =
-    object [ "dId"            .= dId
-           , "name"           .= name
-           , "score"          .= score 
-           , "challengeScore" .= challengeScore ]
+instance ToJSON Ad where
+ toJSON (Ad canShow showRatio showCount clickCount requestCount imagePath clickUrl) =
+    object [ "canShow"      .= canShow
+           , "showRatio"    .= showRatio
+           , "showCount"    .= showCount
+           , "clickCount"   .= clickCount
+           , "requestCount" .= requestCount
+           , "imagePath"    .= imagePath
+           , "clickUrl"     .= clickUrl]
 
-instance FromJSON CPool where
- parseJSON (Object v) =
-  CPool <$> v .: "dId"
-        <*> v .: "from"
-        <*> v .: "to"
-        <*> v .: "targetScore"
-        <*> v .: "theme"
-        <*> v .: "status"
- parseJSON _ = mzero
+gCanShow   (Ad canShow _ _ _ _ _ _) = canShow
+gShowRatio (Ad _ showRatio _ _ _ _ _) = showRatio
+gSCount    (Ad _ _ showCount _ _ _ _) = showCount
 
-instance ToJSON CPool where
- toJSON (CPool dId from to targetScore theme status) =
-    object [ "dId"         .= dId
-           , "from"        .= from
-           , "to"          .= to
-           , "targetScore" .= targetScore
-           , "theme"       .= theme
-           , "status"      .= status]
-
-instance FromJSON UserID where
- parseJSON (Object v) = UserID <$> v .: "uID"
- parseJSON _ = mzero
-
-instance ToJSON UserID where
- toJSON (UserID uid) =
-    object [ "uID" .= uid]
+gRequestCount (Ad _ _ _ _ requestCount _ _) = requestCount
+gFilePath     (Ad _ _ _ _ _ imagePath _) = imagePath
+gUrl          (Ad _ _ _ _ _ _ clickUrl) = clickUrl

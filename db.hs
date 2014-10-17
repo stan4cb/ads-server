@@ -7,85 +7,50 @@ module DB where
 
 import Model
 import Data.Text hiding(count)
-import Data.Aeson
 import Database.Persist.Sqlite
 
-{- --- -}
-initDB = runSqlite "mydb.sqlite" $ runMigration migrateAll
+import Web.Spock.Simple
+import Control.Monad.Logger (runNoLoggingT)
+import Control.Monad.IO.Class (liftIO)
 
-runDB action = runSqlite "mydb.sqlite" $ action
+dbName = "adser.sqlite"
 
-{- Add -}
-insertPerson person = runDB $ insert person
+gConnFake = PCConn (ConnBuilder (return ()) (const (return ())) (PoolCfg 1 1 1))
 
-addMatch match = runDB $ insert match
+{- Main -}
+
+initDB   = runSqlite dbName $ runMigration migrateAll
+lockDB p = runSqlPool (selectFirst [AdId ==. (toKey (0 :: Int))] []) p
+
+createPool = runNoLoggingT $ createSqlitePool dbName 10
+
+runIOPool action = do
+	pool <- getState
+	liftIO $ runSqlPool action pool
 
 {- Update -}
-uMatchStat mid nStatus =
-	runDB $ update (toKeyCP mid) [CPoolStatus =. nStatus]
 
-uMatchTarget mid nStatus =
-	runDB $ update (toKeyCP mid) [CPoolTargetScore =. nStatus]
+incClick Nothing = liftIO $ print ("Missing or invalid param" :: Text)
+incClick (Just pid :: Maybe Int) = runIOPool (update (toKey pid) [AdClickCount +=. 1])
 
-uScore pid score =
-	runDB $ update (toKeyLB pid) [LeaderboardScore =. score]
+incShow False _  = liftIO $ return ()
+incShow True pid = runIOPool (update (toKey pid) [AdShowCount +=. 1])
 
-uName pid nName =
-	runDB $ update (toKeyLB pid) [LeaderboardName =. nName]
-
-suId pid = runDB $ update pid [LeaderboardDId =. (gInt $ keyOutLB pid)]
-
-muId pid = runDB $ update pid [CPoolDId =. (gInt $ keyOutCP pid)]
-
+incRequest pid = runIOPool (update (toKey pid) [AdRequestCount +=. 1])
 {- Get -}
-getTop = runDB $ selectList [] [Desc LeaderboardScore, LimitTo 10]
 
-getTopChallenge = runDB $ selectList [] [Desc LeaderboardChallengeScore, LimitTo 10]
+getAd Nothing                 = liftIO $ return Nothing
+getAd (Just pid :: Maybe Int) = runIOPool (selectFirst [AdId ==. (toKey pid) ] [])
 
-getByID (pid :: Int) = runDB $ selectList [LeaderboardId ==. (toKeyLB pid)] []
-
-getMatch (pid :: Int) = runDB $ selectList [CPoolTo ==. pid] []
-
-getByMatchID (pid :: Int) = runDB $ selectList [LeaderboardId ==. (toKeyLB pid)] []
-
-getPlayerRank (score :: Int) = runDB $ count [LeaderboardScore >. score]
-
-getPlayerRankC (score :: Int) = runDB $ count [LeaderboardChallengeScore >. score]
-
-getPlayerRandom w = (runDB $ rawSql (getWithout w)  [])
-
-getWithout w = append (append "select ?? from leaderboard where id!=" (pack $ show w)) " order by random() limit 1"
-
-{- Remove -}
-removeMatch (mID :: Int) = runDB $ delete $ (toKeyCP mID :: CPoolId) 
 
 {- Tools -}
+
 gInt (SqlBackendKey k) = fromIntegral k
 
---keyOut key = unKey key
+toKey key = (AdKey $ fromIntegral key)
 
-keyOutLB (LeaderboardKey key) = key
-keyOutCP (CPoolKey key) = key
+--extract Nothing  = Nothing
+extract (Just e) = entityVal e
 
---toKey key = (Key $ PersistInt64 $ fromIntegral key)
-toKeyLB key = (LeaderboardKey $ fromIntegral key)
-toKeyCP key = (CPoolKey $ fromIntegral key)
-
-extract [] = []
-extract (e:ent) = eV : extract ent
-	where
-		eV = entityVal e
-
-
-{-
-updateRowsByID pid rowToUpdate nVal =
-	runDB $ update (Key $ toPersistValue pid) [rowToUpdate =. nVal]
-
-updateRowsByName (pid :: Text) rowToUpdate nVal = 
-	runDB $ updateWhere [LeaderboardName ==. pid] [rowToUpdate =. nVal]
-
-extractKeys [] = []
-extractKeys (e:ent) = eV : extractKeys ent
-	where
-		eV = keyOut e
--}
+extractS [] = []
+extractS (e:es) = extract e : extractS es
